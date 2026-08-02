@@ -233,4 +233,119 @@ public class ExpenseTests(CustomWebApplicationFactory factory)
         Assert.Equal(JsonValueKind.Number, root.GetProperty("amount").ValueKind);
         Assert.False(root.TryGetProperty("currency", out _));
     }
+
+    [Fact]
+    public async Task PostExpense_WithDuplicateParticipantIds_TreatsAsDistinctParticipants()
+    {
+        var client = factory.CreateClient();
+        var owner = await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+        var topicResponse = await client.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var topic = await topicResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        var memberClient = factory.CreateClient();
+        var member = await AuthTestHelpers.SignInAsNewUserAsync(memberClient, factory.GoogleTokenValidator);
+        await memberClient.PostAsync($"/api/topics/join/{topic!.InviteCode}", null);
+
+        // owner.Id listed twice - must not throw (ExpenseParticipant's PK is
+        // the (ExpenseId, UserId) pair) and must not double-count owner's
+        // share; treated exactly as if only [owner, member] were tagged.
+        var response = await client.PostAsJsonAsync($"/api/topics/{topic.Id}/expenses", new
+        {
+            description = "Dinner",
+            amount = 30.00m,
+            paidByUserId = owner.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { owner.Id, owner.Id, member.Id },
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var expense = await response.Content.ReadFromJsonAsync<ExpenseResponse>();
+        Assert.Equal(2, expense!.Participants.Count);
+        Assert.Equal(15.00m, expense.Participants.Single(p => p.UserId == owner.Id).ShareAmount);
+        Assert.Equal(15.00m, expense.Participants.Single(p => p.UserId == member.Id).ShareAmount);
+    }
+
+    [Fact]
+    public async Task PostExpense_WithNonMemberParticipant_Returns400()
+    {
+        var client = factory.CreateClient();
+        var owner = await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+        var topicResponse = await client.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var topic = await topicResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        var outsiderClient = factory.CreateClient();
+        var outsider = await AuthTestHelpers.SignInAsNewUserAsync(outsiderClient, factory.GoogleTokenValidator);
+        // outsider never joins topic
+
+        var response = await client.PostAsJsonAsync($"/api/topics/{topic!.Id}/expenses", new
+        {
+            description = "Dinner",
+            amount = 20.00m,
+            paidByUserId = owner.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { owner.Id, outsider.Id },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostExpense_WithNonPositiveAmount_Returns400()
+    {
+        var client = factory.CreateClient();
+        var owner = await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+        var topicResponse = await client.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var topic = await topicResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        var response = await client.PostAsJsonAsync($"/api/topics/{topic!.Id}/expenses", new
+        {
+            description = "Free thing",
+            amount = 0.00m,
+            paidByUserId = owner.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { owner.Id },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PutExpense_RemovingAParticipant_LeavesOnlyTheRemainingParticipants()
+    {
+        var ownerClient = factory.CreateClient();
+        var owner = await AuthTestHelpers.SignInAsNewUserAsync(ownerClient, factory.GoogleTokenValidator);
+        var topicResponse = await ownerClient.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var topic = await topicResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        var memberClient = factory.CreateClient();
+        var member = await AuthTestHelpers.SignInAsNewUserAsync(memberClient, factory.GoogleTokenValidator);
+        await memberClient.PostAsync($"/api/topics/join/{topic!.InviteCode}", null);
+
+        var createResponse = await ownerClient.PostAsJsonAsync($"/api/topics/{topic.Id}/expenses", new
+        {
+            description = "Dinner",
+            amount = 20.00m,
+            paidByUserId = owner.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { owner.Id, member.Id },
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<ExpenseResponse>();
+
+        // Removes "member", leaving only "owner" - proves the old
+        // participant set is fully replaced, not unioned with the new one.
+        var editResponse = await ownerClient.PutAsJsonAsync($"/api/expenses/{created!.Id}", new
+        {
+            description = "Dinner",
+            amount = 20.00m,
+            paidByUserId = owner.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { owner.Id },
+        });
+
+        Assert.Equal(HttpStatusCode.OK, editResponse.StatusCode);
+        var edited = await editResponse.Content.ReadFromJsonAsync<ExpenseResponse>();
+        Assert.Single(edited!.Participants);
+        Assert.Equal(owner.Id, edited.Participants[0].UserId);
+        Assert.Equal(20.00m, edited.Participants[0].ShareAmount);
+    }
 }

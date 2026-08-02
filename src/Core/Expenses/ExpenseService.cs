@@ -70,8 +70,12 @@ public sealed class ExpenseService(
 
     private List<ExpenseParticipant> BuildParticipants(Guid expenseId, decimal amount, IReadOnlyList<Guid> participantUserIds)
     {
-        var shares = splitService.SplitEqually(amount, participantUserIds);
-        return participantUserIds
+        // ExpenseParticipant's key is (ExpenseId, UserId) - a duplicated id
+        // in the input must collapse to one participant, not one row per
+        // occurrence (which would violate that key at the database level).
+        var distinctParticipantUserIds = participantUserIds.Distinct().ToList();
+        var shares = splitService.SplitEqually(amount, distinctParticipantUserIds);
+        return distinctParticipantUserIds
             .Select(userId => new ExpenseParticipant { ExpenseId = expenseId, UserId = userId, ShareAmount = shares[userId] })
             .ToList();
     }
