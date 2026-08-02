@@ -19,6 +19,15 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // forwarded headers, and Cloud Run's own edge IPs aren't a fixed,
 // enumerable set - the container is never reachable except through Cloud
 // Run's proxy, so trust the forwarded headers unconditionally here.
+//
+// Known, accepted tradeoff: this means anyone who can reach the process
+// directly (a local `dotnet run`, docker-compose with no proxy in front,
+// or any future non-Cloud-Run deployment) can set X-Forwarded-Proto: https
+// and bypass the HTTPS-redirect check below. That's fine today - there's
+// nothing sensitive reachable any other way in those environments - but if
+// this app is ever deployed somewhere reachable directly (not exclusively
+// through Cloud Run's proxy), this needs KnownProxies/KnownIPNetworks
+// restricted to that proxy's real address(es) instead of cleared.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;

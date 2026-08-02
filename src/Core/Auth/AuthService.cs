@@ -31,7 +31,6 @@ public sealed class AuthService(
             CreatedAt = clock.UtcNow,
         };
 
-        await userRepository.AddAsync(newUser, cancellationToken);
-        return newUser;
+        return await userRepository.AddAsync(newUser, cancellationToken);
     }
 }

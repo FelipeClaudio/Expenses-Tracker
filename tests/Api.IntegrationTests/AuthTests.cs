@@ -41,6 +41,20 @@ public class AuthTests(CustomWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task PostGoogleAuth_WithMissingIdToken_Returns400InsteadOfCrashing()
+    {
+        // A body with no idToken field must be rejected as a malformed
+        // request, not crash with an unhandled exception. [ApiController]'s
+        // automatic model validation already enforces this for GoogleAuthRequest's
+        // non-nullable IdToken (nullable reference types are enabled
+        // project-wide) - this test locks that behavior in as a regression
+        // guard rather than relying on it silently.
+        var response = await _client.PostAsJsonAsync("/api/auth/google", new { });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PostGoogleAuth_FirstSignIn_CreatesUserKeyedByGoogleSubjectId()
     {
         var subject = $"google-subject-{Guid.NewGuid()}";
