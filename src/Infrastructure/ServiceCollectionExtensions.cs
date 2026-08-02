@@ -1,4 +1,5 @@
 using Core.Auth;
+using Core.Topics;
 using Core.Users;
 using Infrastructure.Auth;
 using Infrastructure.Persistence;
@@ -23,6 +24,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
         services.AddScoped<IAuthService, AuthService>();
+
+        services.AddScoped<ITopicRepository, TopicRepository>();
+        services.AddScoped<ITopicMembershipRepository, TopicMembershipRepository>();
+        services.AddScoped<ITopicService, TopicService>();
 
         services.Configure<GoogleAuthOptions>(configuration.GetSection("Google"));
 
