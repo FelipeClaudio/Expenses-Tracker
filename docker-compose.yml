@@ -1,0 +1,46 @@
+# Local development only. Credentials below are intentionally hardcoded
+# placeholders for the local Postgres container — never copy this pattern
+# into a real environment; production config comes from Cloud Run/Neon
+# secrets, not this file.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: expenses_tracker
+      POSTGRES_USER: expenses_tracker
+      POSTGRES_PASSWORD: expenses_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expenses_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=postgres;Database=expenses_tracker;Username=expenses_tracker;Password=expenses_tracker"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  client:
+    build:
+      context: client
+    environment:
+      VITE_API_BASE_URL: "http://localhost:8080"
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
