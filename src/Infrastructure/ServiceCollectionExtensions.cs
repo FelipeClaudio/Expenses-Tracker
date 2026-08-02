@@ -1,4 +1,5 @@
 using Core.Auth;
+using Core.Expenses;
 using Core.Topics;
 using Core.Users;
 using Infrastructure.Auth;
@@ -28,6 +29,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITopicRepository, TopicRepository>();
         services.AddScoped<ITopicMembershipRepository, TopicMembershipRepository>();
         services.AddScoped<ITopicService, TopicService>();
+
+        services.AddScoped<IExpenseRepository, ExpenseRepository>();
+        services.AddSingleton<IExpenseSplitService, ExpenseSplitService>();
+        services.AddScoped<IExpenseService, ExpenseService>();
 
         services.Configure<GoogleAuthOptions>(configuration.GetSection("Google"));
 

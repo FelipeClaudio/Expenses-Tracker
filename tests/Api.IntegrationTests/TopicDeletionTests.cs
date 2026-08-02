@@ -11,11 +11,8 @@ public class TopicDeletionTests(CustomWebApplicationFactory factory)
     [Fact]
     public async Task DeleteTopic_ByCreator_CascadesToDescendantsAndExpenses()
     {
-        // "AndExpenses" will become real once Expense exists (build-order
-        // step 6, which comes after this one) - for now this proves cascade
-        // over the subtopic tree, the only descendant kind that exists yet.
         var client = factory.CreateClient();
-        await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+        var user = await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
 
         var rootResponse = await client.PostAsJsonAsync("/api/topics", new { name = "Trip" });
         var root = await rootResponse.Content.ReadFromJsonAsync<TopicResponse>();
@@ -23,15 +20,58 @@ public class TopicDeletionTests(CustomWebApplicationFactory factory)
         var mid = await midResponse.Content.ReadFromJsonAsync<TopicResponse>();
         var leafResponse = await client.PostAsJsonAsync($"/api/topics/{mid!.Id}/subtopics", new { name = "Receipts" });
         var leaf = await leafResponse.Content.ReadFromJsonAsync<TopicResponse>();
+        var expenseResponse = await client.PostAsJsonAsync($"/api/topics/{leaf!.Id}/expenses", new
+        {
+            description = "Fuel receipt",
+            amount = 15.00m,
+            paidByUserId = user.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { user.Id },
+        });
+        var expense = await expenseResponse.Content.ReadFromJsonAsync<ExpenseResponse>();
 
         var deleteResponse = await SendDeleteAsync(client, mid.Id, confirmCascade: true);
 
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/topics/{mid.Id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/topics/{leaf!.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/topics/{leaf.Id}")).StatusCode);
+
+        // The expense logged on the now-deleted leaf must be gone too -
+        // proven via the root's (still-alive) expense listing, since the
+        // leaf itself no longer exists to query directly.
+        var rootExpensesResponse = await client.GetAsync($"/api/topics/{root.Id}/expenses");
+        var rootExpenses = await rootExpensesResponse.Content.ReadFromJsonAsync<List<ExpenseResponse>>();
+        Assert.DoesNotContain(rootExpenses!, e => e.Id == expense!.Id);
 
         // The root itself, a sibling of the deleted branch, is untouched.
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/topics/{root.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteTopic_WithExpensesButNoSubtopics_WithoutConfirmation_Returns409WithExpenseCount()
+    {
+        var client = factory.CreateClient();
+        var user = await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+        var rootResponse = await client.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var root = await rootResponse.Content.ReadFromJsonAsync<TopicResponse>();
+        await client.PostAsJsonAsync($"/api/topics/{root!.Id}/expenses", new
+        {
+            description = "Souvenirs",
+            amount = 8.00m,
+            paidByUserId = user.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { user.Id },
+        });
+
+        // Zero subtopics, but a real expense directly on the topic - FR-9
+        // requires confirmation for either kind of descendant, not just
+        // subtopics.
+        var deleteResponse = await SendDeleteAsync(client, root.Id, confirmName: root.Name);
+
+        Assert.Equal(HttpStatusCode.Conflict, deleteResponse.StatusCode);
+        var warning = await deleteResponse.Content.ReadFromJsonAsync<DeleteTopicWarningResponse>();
+        Assert.Equal(0, warning!.SubtopicCount);
+        Assert.Equal(1, warning.ExpenseCount);
     }
 
     [Fact]
@@ -145,6 +185,7 @@ public class TopicDeletionTests(CustomWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.Conflict, deleteResponse.StatusCode);
         var warning = await deleteResponse.Content.ReadFromJsonAsync<DeleteTopicWarningResponse>();
         Assert.Equal(1, warning!.SubtopicCount);
+        Assert.Equal(0, warning.ExpenseCount);
     }
 
     [Fact]

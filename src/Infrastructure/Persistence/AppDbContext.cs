@@ -1,3 +1,4 @@
+using Core.Expenses;
 using Core.Topics;
 using Core.Users;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Topic> Topics => Set<Topic>();
 
     public DbSet<TopicMember> TopicMembers => Set<TopicMember>();
+
+    public DbSet<Expense> Expenses => Set<Expense>();
+
+    public DbSet<ExpenseParticipant> ExpenseParticipants => Set<ExpenseParticipant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +65,42 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             member.HasOne<User>()
                 .WithMany()
                 .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Expense>(expense =>
+        {
+            expense.HasKey(e => e.Id);
+            expense.Property(e => e.Description).IsRequired();
+
+            expense.HasOne<Topic>()
+                .WithMany()
+                .HasForeignKey(e => e.TopicId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            expense.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.PaidByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            expense.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ExpenseParticipant>(participant =>
+        {
+            participant.HasKey(p => new { p.ExpenseId, p.UserId });
+
+            participant.HasOne<Expense>()
+                .WithMany()
+                .HasForeignKey(p => p.ExpenseId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            participant.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

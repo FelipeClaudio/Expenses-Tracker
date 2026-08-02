@@ -1,3 +1,4 @@
+using Core.Expenses;
 using Core.Topics;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -79,6 +80,21 @@ public sealed class TopicRepository(AppDbContext dbContext) : ITopicRepository
                 .ToListAsync(cancellationToken);
             dbContext.TopicMembers.RemoveRange(members);
         }
+
+        // Every expense logged anywhere in the deleted subtree must go too
+        // (UC-6: cascading deletion to descendant subtopics AND expenses) -
+        // their own Restrict FK to Topics means they'd otherwise block the
+        // topic deletes below.
+        var allTopicIds = descendants.Select(d => d.Id).Append(topic.Id).ToList();
+        var expenses = await dbContext.Expenses
+            .Where(e => allTopicIds.Contains(e.TopicId))
+            .ToListAsync(cancellationToken);
+        var expenseIds = expenses.Select(e => e.Id).ToList();
+        var expenseParticipants = await dbContext.ExpenseParticipants
+            .Where(p => expenseIds.Contains(p.ExpenseId))
+            .ToListAsync(cancellationToken);
+        dbContext.ExpenseParticipants.RemoveRange(expenseParticipants);
+        dbContext.Expenses.RemoveRange(expenses);
 
         dbContext.Topics.RemoveRange(descendants);
         dbContext.Topics.Remove(topic);

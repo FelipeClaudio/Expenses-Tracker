@@ -21,10 +21,12 @@ public class AuthorizationTests(CustomWebApplicationFactory factory)
     [InlineData("GET", "/subtopics")]
     [InlineData("POST", "/subtopics")]
     [InlineData("POST", "/invite/rotate")]
+    [InlineData("GET", "/expenses")]
+    [InlineData("POST", "/expenses")]
     public async Task NonMember_Returns403ForTopicEndpoints(string method, string subPath)
     {
         var ownerClient = factory.CreateClient();
-        await AuthTestHelpers.SignInAsNewUserAsync(ownerClient, factory.GoogleTokenValidator);
+        var owner = await AuthTestHelpers.SignInAsNewUserAsync(ownerClient, factory.GoogleTokenValidator);
         var createResponse = await ownerClient.PostAsJsonAsync("/api/topics", new { name = "Owner's Topic" });
         var topic = await createResponse.Content.ReadFromJsonAsync<TopicResponse>();
 
@@ -35,6 +37,17 @@ public class AuthorizationTests(CustomWebApplicationFactory factory)
         if (method is "PATCH" or "POST" && subPath is "" or "/subtopics")
         {
             request.Content = JsonContent.Create(new { name = "Attempted Change" });
+        }
+        else if (method is "POST" && subPath is "/expenses")
+        {
+            request.Content = JsonContent.Create(new
+            {
+                description = "Attempted expense",
+                amount = 10.00m,
+                paidByUserId = owner.Id,
+                expenseDate = DateTimeOffset.UtcNow,
+                participantUserIds = new[] { owner.Id },
+            });
         }
 
         var response = await outsiderClient.SendAsync(request);
