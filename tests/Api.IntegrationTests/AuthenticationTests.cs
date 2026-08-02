@@ -27,6 +27,9 @@ public class AuthenticationTests(CustomWebApplicationFactory factory)
     [InlineData("POST", "/api/topics/00000000-0000-0000-0000-000000000000/expenses")]
     [InlineData("PUT", "/api/expenses/00000000-0000-0000-0000-000000000000")]
     [InlineData("DELETE", "/api/expenses/00000000-0000-0000-0000-000000000000")]
+    [InlineData("GET", "/api/topics/00000000-0000-0000-0000-000000000000/balances")]
+    [InlineData("GET", "/api/topics/00000000-0000-0000-0000-000000000000/settlements")]
+    [InlineData("POST", "/api/topics/00000000-0000-0000-0000-000000000000/settlements/mark-paid")]
     public async Task NoSessionCookie_Returns401ForAllProtectedEndpoints(string method, string path)
     {
         var request = new HttpRequestMessage(new HttpMethod(method), path);

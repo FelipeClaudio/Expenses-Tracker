@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Api.Contracts;
 using Core.Expenses;
+using Core.Settlements;
 using Core.Topics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,7 +9,12 @@ namespace Api.Controllers;
 
 [ApiController]
 [Route("api/topics")]
-public sealed class TopicsController(ITopicService topicService, IExpenseService expenseService) : ControllerBase
+public sealed class TopicsController(
+    ITopicService topicService,
+    IExpenseService expenseService,
+    IBalanceService balanceService,
+    ISettlementService settlementService,
+    ISettledTransferService settledTransferService) : ControllerBase
 {
     private Guid CurrentUserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -248,6 +254,85 @@ public sealed class TopicsController(ITopicService topicService, IExpenseService
         return Ok(ToResponse(result));
     }
 
+    [HttpGet("{id:guid}/balances")]
+    public async Task<IActionResult> GetBalances(Guid id, CancellationToken cancellationToken)
+    {
+        var topic = await topicService.GetByIdAsync(id, cancellationToken);
+        if (topic is null)
+        {
+            return NotFound();
+        }
+
+        if (!await topicService.IsMemberAsync(topic, CurrentUserId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var (root, topicIds) = await ResolveRootAndSubtreeAsync(topic, cancellationToken);
+        var balances = await balanceService.GetNetBalancesAsync(root.Id, topicIds, cancellationToken);
+
+        return Ok(balances.Select(b => new BalanceResponse(b.Key, b.Value)));
+    }
+
+    [HttpGet("{id:guid}/settlements")]
+    public async Task<IActionResult> GetSettlements(Guid id, CancellationToken cancellationToken)
+    {
+        var topic = await topicService.GetByIdAsync(id, cancellationToken);
+        if (topic is null)
+        {
+            return NotFound();
+        }
+
+        if (!await topicService.IsMemberAsync(topic, CurrentUserId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var (root, topicIds) = await ResolveRootAndSubtreeAsync(topic, cancellationToken);
+        var balances = await balanceService.GetNetBalancesAsync(root.Id, topicIds, cancellationToken);
+        var transfers = settlementService.ComputeSettlement(balances);
+
+        return Ok(transfers.Select(t => new SettlementTransferResponse(t.FromUserId, t.ToUserId, t.Amount)));
+    }
+
+    [HttpPost("{id:guid}/settlements/mark-paid")]
+    public async Task<IActionResult> MarkSettlementPaid(Guid id, [FromBody] MarkSettlementPaidRequest request, CancellationToken cancellationToken)
+    {
+        var topic = await topicService.GetByIdAsync(id, cancellationToken);
+        if (topic is null)
+        {
+            return NotFound();
+        }
+
+        if (!await topicService.IsMemberAsync(topic, CurrentUserId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (request.Amount <= 0)
+        {
+            return BadRequest("Amount must be greater than zero.");
+        }
+
+        if (request.FromUserId == request.ToUserId)
+        {
+            return BadRequest("FromUserId and ToUserId must be different.");
+        }
+
+        var (root, _) = await ResolveRootAndSubtreeAsync(topic, cancellationToken);
+
+        if (!await topicService.IsMemberAsync(root, request.FromUserId, cancellationToken) ||
+            !await topicService.IsMemberAsync(root, request.ToUserId, cancellationToken))
+        {
+            return BadRequest("Both parties must be members of this topic.");
+        }
+
+        var settled = await settledTransferService.RecordSettlementAsync(
+            root.Id, request.FromUserId, request.ToUserId, request.Amount, CurrentUserId, cancellationToken);
+
+        return Ok(new SettledTransferResponse(settled.Id, settled.FromUserId, settled.ToUserId, settled.Amount, settled.RecordedAt));
+    }
+
     [HttpPost("join/{inviteCode}")]
     public async Task<IActionResult> Join(string inviteCode, CancellationToken cancellationToken)
     {
@@ -258,6 +343,14 @@ public sealed class TopicsController(ITopicService topicService, IExpenseService
         }
 
         return Ok(ToResponse(topic));
+    }
+
+    private async Task<(Topic Root, List<Guid> TopicIds)> ResolveRootAndSubtreeAsync(Topic topic, CancellationToken cancellationToken)
+    {
+        var root = topic.IsRoot ? topic : (await topicService.GetByIdAsync(topic.RootTopicId, cancellationToken))!;
+        var descendants = await topicService.GetDescendantsAsync(root, cancellationToken);
+        var topicIds = descendants.Select(d => d.Id).Append(root.Id).ToList();
+        return (root, topicIds);
     }
 
     private static TopicResponse ToResponse(Topic topic) => new(

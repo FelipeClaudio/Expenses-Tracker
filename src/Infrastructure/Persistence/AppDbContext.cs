@@ -1,4 +1,5 @@
 using Core.Expenses;
+using Core.Settlements;
 using Core.Topics;
 using Core.Users;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Expense> Expenses => Set<Expense>();
 
     public DbSet<ExpenseParticipant> ExpenseParticipants => Set<ExpenseParticipant>();
+
+    public DbSet<SettledTransfer> SettledTransfers => Set<SettledTransfer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -101,6 +104,31 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             participant.HasOne<User>()
                 .WithMany()
                 .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SettledTransfer>(settled =>
+        {
+            settled.HasKey(s => s.Id);
+
+            settled.HasOne<Topic>()
+                .WithMany()
+                .HasForeignKey(s => s.RootTopicId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            settled.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(s => s.FromUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            settled.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(s => s.ToUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            settled.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(s => s.RecordedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

@@ -1,4 +1,5 @@
 using Core.Expenses;
+using Core.Settlements;
 using Core.Topics;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -79,6 +80,16 @@ public sealed class TopicRepository(AppDbContext dbContext) : ITopicRepository
                 .Where(m => m.RootTopicId == topic.Id)
                 .ToListAsync(cancellationToken);
             dbContext.TopicMembers.RemoveRange(members);
+
+            // SettledTransfer.RootTopicId always names an actual root (it's
+            // group-wide history, not tied to any one subtopic node), so
+            // this only ever applies when the node being deleted is itself
+            // a root - same "removes the whole group's... history" UC-6
+            // constraint as membership above.
+            var settledTransfers = await dbContext.SettledTransfers
+                .Where(s => s.RootTopicId == topic.Id)
+                .ToListAsync(cancellationToken);
+            dbContext.SettledTransfers.RemoveRange(settledTransfers);
         }
 
         // Every expense logged anywhere in the deleted subtree must go too

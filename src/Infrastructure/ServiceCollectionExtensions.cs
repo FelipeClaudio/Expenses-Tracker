@@ -1,5 +1,6 @@
 using Core.Auth;
 using Core.Expenses;
+using Core.Settlements;
 using Core.Topics;
 using Core.Users;
 using Infrastructure.Auth;
@@ -33,6 +34,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IExpenseRepository, ExpenseRepository>();
         services.AddSingleton<IExpenseSplitService, ExpenseSplitService>();
         services.AddScoped<IExpenseService, ExpenseService>();
+
+        services.AddSingleton<ISettlementService, SettlementService>();
+        services.AddScoped<ISettledTransferRepository, SettledTransferRepository>();
+        services.AddScoped<IBalanceService, BalanceService>();
+        services.AddScoped<ISettledTransferService, SettledTransferService>();
 
         services.Configure<GoogleAuthOptions>(configuration.GetSection("Google"));
 
