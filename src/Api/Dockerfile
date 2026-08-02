@@ -1,7 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Expenses-Tracker.sln ./
 COPY src/Api/Api.csproj src/Api/
 COPY src/Core/Core.csproj src/Core/
 COPY src/Infrastructure/Infrastructure.csproj src/Infrastructure/
