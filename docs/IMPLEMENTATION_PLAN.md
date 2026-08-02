@@ -63,6 +63,16 @@ three-way cycle, single payer for the whole group, already-settled no-op,
 uneven amounts producing fractional cents, and a case proving the output is
 at most `n − 1` transactions.
 
+`ExpenseSplitServiceTests` scenarios (pure `Core` unit tests, same isolation
+level as `SettlementServiceTests` — required by spec §7's "unit-tested in
+isolation" constraint for the split logic, not just the settlement logic):
+evenly divisible amount split N ways (all shares equal), an amount that
+doesn't divide evenly (e.g. €10.00 across 3 participants) proving shares sum
+back exactly to the original amount with the remainder cent(s) allocated
+deterministically, a single-participant expense (share = full amount), and a
+many-participants/small-amount case proving no share is negative and shares
+still sum to the total.
+
 ### Functional requirements
 
 | FR | Test | Notes |
@@ -73,15 +83,29 @@ at most `n − 1` transactions.
 | FR-4, FR-5 | covered by UC-3/UC-4 tests above | |
 | FR-6, FR-7 | covered by UC-2/UC-5 tests above | |
 | FR-8 | `TopicTests.PatchTopic_ByAnyMember_RenamesSuccessfully` | |
-| FR-8a, FR-9 | covered by UC-6 tests above | |
-| FR-10, FR-11 | covered by UC-7 test above | |
+| FR-8a | covered by UC-6 tests above | |
+| FR-9 | `TopicDeletionTests.DeleteTopic_WithDescendants_WithoutConfirmation_Returns409WithWarningPayload`; `..._WithConfirmation_Succeeds`; `DeleteRootTopic_WithoutNameConfirmation_Returns400`; `..._WithCorrectNameConfirmation_Succeeds` | The API is the enforcement point (never trust a client-only confirmation dialog) — see note below the matrix. |
+| FR-10, FR-11 | `ExpenseTests.PostExpense_SplitsAmountEquallyAmongTaggedParticipants` (API) + `ExpenseSplitServiceTests` (Core, see scenarios above) | Previously only the API happy-path test was cited; the isolated unit suite required by spec §7 was missing. |
 | FR-12 | covered by UC-8 test above | |
 | FR-12a | covered by UC-9 tests above | |
 | FR-13 | covered by UC-8 test above | |
 | FR-14 | covered by UC-10 test above | |
 | FR-15 | covered by `SettlementServiceTests` | |
-| FR-16, FR-17 | covered by UC-12 test above | |
+| FR-16 | covered by UC-12 test above (`SettlementTests.PostMarkPaid_ExcludesTransferFromFutureRecomputation`) | |
+| FR-17 | `BalanceTests.GetBalances_ImmediatelyReflectsNewlyLoggedExpense_NotCachedStale`; `SettlementApiTests.GetSettlements_ImmediatelyReflectsEditedExpense_NotCachedStale` | Distinct from FR-16: this is about no caching layer masking the current state, not about excluding settled transfers — the previously-cited mark-paid test doesn't exercise this. |
 | FR-18 | Structural: no currency field/parameter exists on the `Expense` DTO at all (schema-level enforcement), plus `ExpenseTests.PostExpense_ResponseAlwaysReportsAmountInEur` (serialization contract test) | |
+
+**FR-9 confirmation mechanism:** confirmation has to be enforced server-side,
+not just as a frontend dialog (a frontend-only gate is trivially bypassable
+by calling the API directly, and NFR-12 already establishes the API as the
+authorization boundary). Concretely: `DELETE /api/topics/{id}` returns `409`
+with a warning payload (counts of descendant subtopics/expenses that would be
+removed) unless the request includes `confirmCascade: true`; deleting a
+**root** topic additionally requires a `confirmName` field matching the
+topic's exact name, returning `400` otherwise. The frontend's confirmation
+dialog (built in step 8) is the UX for supplying these fields, but the tests
+above hit the API directly so the requirement is verified independent of any
+particular frontend implementation.
 
 ### Non-functional requirements
 
@@ -96,7 +120,7 @@ at most `n − 1` transactions.
 | NFR-7, NFR-8, NFR-9 (mobile-first, touch targets, responsive) | Playwright `responsive.spec.ts`: layout assertions at 360/390/768/1280px (bottom nav vs. sidebar, card vs. table lists, computed touch-target size ≥44px) | |
 | NFR-10 (HTTPS) | `SecurityHeadersTests.HttpRequest_RedirectsToHttps` | |
 | NFR-11 (cookie flags) | `AuthTests` asserts `Set-Cookie` has `HttpOnly`, `Secure`, `SameSite=None` | Same test as UC-1, extra assertions. |
-| NFR-12 (authz everywhere) | `AuthorizationTests` theory (see FR-3) + delete-specific creator checks (FR-8a/FR-12a tests) | |
+| NFR-12 (authn + authz everywhere) | `AuthenticationTests.NoSessionCookie_Returns401ForAllProtectedEndpoints` (`[Theory]`, the "is there a session at all" half) + `AuthorizationTests` theory (see FR-3, the "is this session a Topic member" half) + delete-specific creator checks (FR-8a/FR-12a tests) | Previously only the authorization half was cited; the requirement has two independent halves (authenticate, then authorize) and each needs its own theory so a regression in one can't hide behind the other passing. |
 | NFR-13 (share immutability) | `ExpenseTests.AddingMemberAfterExpenseCreated_DoesNotAlterExistingExpenseShares` | |
 | NFR-14 (scale) | Not automated in this phase | Sized for small groups; no load-test infra proposed now — flag as future work if usage grows. |
 | NFR-15 (cold start) | Not automated | Accepted operational tradeoff per spec; nothing to assert. |
@@ -116,7 +140,8 @@ src/
   Infrastructure/                     (AppDbContext, EF migrations, repo impls,
                                         GoogleTokenValidator, SystemClock)
 tests/
-  Core.Tests/                         (xUnit, no infra deps)
+  Core.Tests/                         (xUnit, no infra deps — SettlementServiceTests,
+                                        ExpenseSplitServiceTests, ArchitectureTests)
   Api.IntegrationTests/               (xUnit + WebApplicationFactory +
                                         Testcontainers.PostgreSql;
                                         FakeGoogleTokenValidator, FakeClock)
@@ -151,23 +176,34 @@ refactor with tests green.
    then implement `SettlementService`. Also add
    `ArchitectureTests.CoreProject_HasNoInfrastructureOrAspNetReferences` here
    since `Core` is fully defined at this point.
-3. **Auth slice** (UC-1, FR-1/2, NFR-10/11) — `FakeGoogleTokenValidator` +
+3. **Auth slice** (UC-1, FR-1/2, NFR-10/11/12) — `FakeGoogleTokenValidator` +
    `AuthTests` first, then `POST /api/auth/google`, cookie issuance, HTTPS
-   redirect middleware.
+   redirect middleware. Also start `AuthenticationTests` here (the
+   no-session-cookie → 401 theory) with whatever protected endpoint exists at
+   this point, and extend it with one more `[InlineData]` case in every
+   subsequent slice as new endpoints are added — same pattern already used
+   for `AuthorizationTests`.
 4. **Topic + membership slice** (UC-2/3/4/5, FR-3/4/5/6/7/8) —
    `TopicTests`/`TopicInviteTests`/`SubtopicTests`/`AuthorizationTests` first,
    then Topic CRUD, invite generation/rotation/redemption, membership checks.
-5. **Topic deletion slice** (UC-6, FR-8a/9) — `TopicDeletionTests` first
-   (creator-only + cascade + root-topic confirmation), then delete endpoint
-   and cascade logic.
+5. **Topic deletion slice** (UC-6, FR-8a/9) — `TopicDeletionTests` first:
+   creator-only + cascade, then the confirmation-gate cases specifically
+   (missing `confirmCascade` → 409 with warning payload, present → succeeds;
+   root delete missing/wrong `confirmName` → 400, correct → succeeds), then
+   the delete endpoint, cascade logic, and confirmation checks.
 6. **Expense slice** (UC-7/8/9/13, FR-10/11/12/12a/13/18, NFR-13) —
-   `ExpenseTests` first covering create/split, edit/recompute, delete
-   (creator-only), list, and the share-immutability case, then the Expense
-   CRUD endpoints and `ExpenseSplitService`.
+   `ExpenseSplitServiceTests` first (pure `Core`, same TDD-starting-point
+   approach as step 2's `SettlementServiceTests`), then `ExpenseTests`
+   covering create/split, edit/recompute, delete (creator-only), list, and
+   the share-immutability case, then implement `ExpenseSplitService` and the
+   Expense CRUD endpoints.
 7. **Balances & settlement API slice** (UC-10/11/12, FR-14/15/16/17) —
    `BalanceTests`/`SettlementApiTests`/`SettlementTests` first (these call the
-   already-tested `SettlementService` from step 2 through the API), then the
-   balances/settlement/mark-paid endpoints.
+   already-tested `SettlementService` from step 2 through the API), including
+   the FR-17 "immediately reflects" cases (log/edit an expense, then read
+   balances/settlements in the same test with no cache in between) alongside
+   the FR-16 mark-paid exclusion case, then the balances/settlement/mark-paid
+   endpoints — built with no response caching, by design.
 8. **Frontend component layer** — Vitest+RTL+MSW tests per screen (topic
    list, subtopic tree, add-expense form, balances/settlement view) written
    against the now-stable API contract, then the React components.
