@@ -100,12 +100,17 @@ not just as a frontend dialog (a frontend-only gate is trivially bypassable
 by calling the API directly, and NFR-12 already establishes the API as the
 authorization boundary). Concretely: `DELETE /api/topics/{id}` returns `409`
 with a warning payload (counts of descendant subtopics/expenses that would be
-removed) unless the request includes `confirmCascade: true`; deleting a
-**root** topic additionally requires a `confirmName` field matching the
-topic's exact name, returning `400` otherwise. The frontend's confirmation
-dialog (built in step 8) is the UX for supplying these fields, but the tests
-above hit the API directly so the requirement is verified independent of any
-particular frontend implementation.
+removed) unless the request includes `confirmCascade=true`; deleting a
+**root** topic additionally requires a `confirmName` value matching the
+topic's exact name, returning `400` otherwise. Both fields travel as **query
+parameters**, not a JSON body — confirmed empirically during implementation
+that `HttpClient`/`TestServer` do not transmit a request body on `DELETE`
+(`Content-Length`/`Content-Type` arrive empty server-side even with
+`HttpRequestMessage.Content` set), so a body-based design would have silently
+never worked. The frontend's confirmation dialog (built in step 8) is the UX
+for supplying these fields, but the tests above hit the API directly so the
+requirement is verified independent of any particular frontend
+implementation.
 
 ### Non-functional requirements
 

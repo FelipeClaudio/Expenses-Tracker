@@ -92,5 +92,11 @@ public sealed class TopicService(
     public Task<bool> IsMemberAsync(Topic topic, Guid userId, CancellationToken cancellationToken = default) =>
         membershipRepository.IsMemberAsync(topic.RootTopicId, userId, cancellationToken);
 
+    public Task<IReadOnlyList<Topic>> GetDescendantsAsync(Topic topic, CancellationToken cancellationToken = default) =>
+        topicRepository.FindDescendantsAsync(topic, cancellationToken);
+
+    public Task DeleteAsync(Topic topic, IReadOnlyList<Topic> descendants, CancellationToken cancellationToken = default) =>
+        topicRepository.DeleteAsync(topic, descendants, cancellationToken);
+
     private static string GenerateInviteCode() => Guid.NewGuid().ToString("N");
 }
