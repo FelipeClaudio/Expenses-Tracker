@@ -1,3 +1,4 @@
+using Api;
 using Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -13,6 +14,13 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// Catches anything that escapes controller/middleware handling (e.g. the
+// concurrent-first-sign-in race in AuthService, or any future unforeseen
+// failure) so callers get a generic 500 ProblemDetails instead of a raw
+// framework error page - the exception itself is logged, never returned.
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // Cloud Run terminates TLS at its edge and forwards plain HTTP internally,
 // so the app needs to know the original request's port/scheme was https via
@@ -74,6 +82,8 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
