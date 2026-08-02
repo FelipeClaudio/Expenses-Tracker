@@ -93,7 +93,7 @@ public sealed class TopicService(
         membershipRepository.IsMemberAsync(topic.RootTopicId, userId, cancellationToken);
 
     public Task<IReadOnlyList<Topic>> GetDescendantsAsync(Topic topic, CancellationToken cancellationToken = default) =>
-        topicRepository.FindDescendantsAsync(topic.Id, cancellationToken);
+        topicRepository.FindDescendantsAsync(topic, cancellationToken);
 
     public Task DeleteAsync(Topic topic, IReadOnlyList<Topic> descendants, CancellationToken cancellationToken = default) =>
         topicRepository.DeleteAsync(topic, descendants, cancellationToken);

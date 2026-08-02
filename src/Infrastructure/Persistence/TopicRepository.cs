@@ -1,5 +1,6 @@
 using Core.Topics;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Infrastructure.Persistence;
 
@@ -35,14 +36,8 @@ public sealed class TopicRepository(AppDbContext dbContext) : ITopicRepository
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Topic>> FindDescendantsAsync(Guid topicId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Topic>> FindDescendantsAsync(Topic topic, CancellationToken cancellationToken = default)
     {
-        var topic = await FindByIdAsync(topicId, cancellationToken);
-        if (topic is null)
-        {
-            return [];
-        }
-
         // Every topic under the same root, then walk parent-child links in
         // memory - simpler than a recursive SQL CTE and fast enough at this
         // project's scale (NFR-14: tens of members, low thousands of rows).
@@ -56,7 +51,7 @@ public sealed class TopicRepository(AppDbContext dbContext) : ITopicRepository
 
         var descendants = new List<Topic>();
         var queue = new Queue<Guid>();
-        queue.Enqueue(topicId);
+        queue.Enqueue(topic.Id);
         while (queue.Count > 0)
         {
             var currentId = queue.Dequeue();
@@ -88,6 +83,28 @@ public sealed class TopicRepository(AppDbContext dbContext) : ITopicRepository
         dbContext.Topics.RemoveRange(descendants);
         dbContext.Topics.Remove(topic);
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Someone else already deleted this exact topic (or overlapping
+            // descendants) between our fetch and this save - the end state
+            // (gone) matches what was requested, so this is a successful
+            // no-op rather than an error.
+        }
+        catch (DbUpdateException ex) when (IsForeignKeyViolation(ex))
+        {
+            // A new child was added under this node (or one of its
+            // descendants) after we fetched the descendant list but before
+            // this save committed - deleting now would orphan/violate a
+            // reference to that new row. The caller must re-fetch and retry.
+            throw new TopicDeletionConflictException(
+                "The topic's structure changed concurrently (a subtopic may have been added). Please retry.", ex);
+        }
     }
+
+    private static bool IsForeignKeyViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation };
 }

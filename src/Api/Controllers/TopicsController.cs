@@ -159,7 +159,15 @@ public sealed class TopicsController(ITopicService topicService) : ControllerBas
             return BadRequest("Deleting a root topic requires confirmName (as a query parameter) to exactly match the topic's name.");
         }
 
-        await topicService.DeleteAsync(topic, descendants, cancellationToken);
+        try
+        {
+            await topicService.DeleteAsync(topic, descendants, cancellationToken);
+        }
+        catch (TopicDeletionConflictException ex)
+        {
+            return Conflict(ex.Message);
+        }
+
         return NoContent();
     }
 

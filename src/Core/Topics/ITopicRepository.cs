@@ -12,8 +12,8 @@ public interface ITopicRepository
 
     Task UpdateAsync(Topic topic, CancellationToken cancellationToken = default);
 
-    /// <summary>Every descendant at any depth under the given node (not just direct children).</summary>
-    Task<IReadOnlyList<Topic>> FindDescendantsAsync(Guid topicId, CancellationToken cancellationToken = default);
+    /// <summary>Every descendant at any depth under the given, already-fetched node (not just direct children).</summary>
+    Task<IReadOnlyList<Topic>> FindDescendantsAsync(Topic topic, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes the topic and its already-fetched descendants (UC-6/FR-8a).

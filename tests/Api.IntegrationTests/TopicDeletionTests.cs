@@ -35,6 +35,52 @@ public class TopicDeletionTests(CustomWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task DeleteTopic_DeepCascade_RemovesAllDescendantsAtAnyDepth()
+    {
+        // Stress-tests the claim that a single SaveChanges correctly orders
+        // the DELETE statements for an arbitrarily deep tree via EF Core's
+        // own FK-dependency graph, not just the 2-3 levels the other tests
+        // use - deletes from the middle of a 5-level chain.
+        var client = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+
+        var root = await CreateAsync(client, "/api/topics", "Root");
+        var level1 = await CreateAsync(client, $"/api/topics/{root.Id}/subtopics", "L1");
+        var level2 = await CreateAsync(client, $"/api/topics/{level1.Id}/subtopics", "L2");
+        var level3 = await CreateAsync(client, $"/api/topics/{level2.Id}/subtopics", "L3");
+        var level4 = await CreateAsync(client, $"/api/topics/{level3.Id}/subtopics", "L4");
+        var level5 = await CreateAsync(client, $"/api/topics/{level4.Id}/subtopics", "L5");
+
+        var deleteResponse = await SendDeleteAsync(client, level2.Id, confirmCascade: true);
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        foreach (var deleted in new[] { level2, level3, level4, level5 })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/topics/{deleted.Id}")).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/topics/{root.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/topics/{level1.Id}")).StatusCode);
+
+        static async Task<TopicResponse> CreateAsync(HttpClient c, string path, string name)
+        {
+            var response = await c.PostAsJsonAsync(path, new { name });
+            return (await response.Content.ReadFromJsonAsync<TopicResponse>())!;
+        }
+    }
+
+    [Fact]
+    public async Task DeleteTopic_ForNonexistentTopic_Returns404()
+    {
+        var client = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+
+        var response = await SendDeleteAsync(client, Guid.NewGuid());
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task DeleteTopic_ByNonCreator_Returns403()
     {
         var ownerClient = factory.CreateClient();
@@ -90,9 +136,10 @@ public class TopicDeletionTests(CustomWebApplicationFactory factory)
         var subtopicResponse = await client.PostAsJsonAsync($"/api/topics/{root!.Id}/subtopics", new { name = "Fuel" });
         await subtopicResponse.Content.ReadFromJsonAsync<TopicResponse>();
 
-        // A root also has membership at stake, so exercise this gate on a
-        // non-root node (a subtopic) to isolate the cascade-warning
-        // behavior from the root's separate name-confirmation gate.
+        // Deliberately deletes the root itself, with a correct confirmName
+        // but no confirmCascade, proving the cascade-warning gate fires
+        // first regardless - a correct name confirmation alone isn't enough
+        // to bypass it when there's a subtopic still hanging off the root.
         var deleteResponse = await SendDeleteAsync(client, root.Id, confirmName: root.Name);
 
         Assert.Equal(HttpStatusCode.Conflict, deleteResponse.StatusCode);
