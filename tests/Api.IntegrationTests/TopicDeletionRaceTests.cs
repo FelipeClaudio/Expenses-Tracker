@@ -1,4 +1,5 @@
 using Core.Auth;
+using Core.Expenses;
 using Core.Topics;
 using Core.Users;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,6 +71,53 @@ public class TopicDeletionRaceTests(CustomWebApplicationFactory factory)
 
         await Assert.ThrowsAsync<TopicDeletionConflictException>(
             () => staleTopicRepository.DeleteAsync(staleTopic, staleDescendants));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_TopicGainsExpenseConcurrently_StillDeletesCleanly()
+    {
+        // Unlike a concurrently-added child Topic (which the parallel
+        // FK-violation test above proves throws TopicDeletionConflictException,
+        // since it's found via the stale `descendants` snapshot the caller
+        // passed in), a concurrently-added Expense on the topic itself is
+        // NOT a race at all: DeleteAsync re-queries dbContext.Expenses by
+        // topic id live, and topic.Id itself (unlike the descendants list)
+        // is never stale. So this is the one case where "generalizes to
+        // Expense automatically" actually means "there's no race to catch,"
+        // not "the same exception fires" - confirmed here rather than
+        // assumed.
+        var (rootId, creatorUserId) = await CreateRootTopicAsync();
+
+        using var staleScope = factory.Services.CreateScope();
+        var staleTopicRepository = staleScope.ServiceProvider.GetRequiredService<ITopicRepository>();
+        var staleTopic = await staleTopicRepository.FindByIdAsync(rootId);
+        var staleDescendants = await staleTopicRepository.FindDescendantsAsync(staleTopic!);
+        Assert.Empty(staleDescendants);
+
+        using var concurrentScope = factory.Services.CreateScope();
+        var concurrentExpenseRepository = concurrentScope.ServiceProvider.GetRequiredService<IExpenseRepository>();
+        var clock = concurrentScope.ServiceProvider.GetRequiredService<IClock>();
+        var expense = new Expense
+        {
+            Id = Guid.NewGuid(),
+            TopicId = rootId,
+            Description = "Snuck In Concurrently",
+            Amount = 10.00m,
+            PaidByUserId = creatorUserId,
+            ExpenseDate = clock.UtcNow,
+            CreatedByUserId = creatorUserId,
+            CreatedAt = clock.UtcNow,
+        };
+        await concurrentExpenseRepository.AddAsync(expense, [new ExpenseParticipant
+        {
+            ExpenseId = expense.Id,
+            UserId = creatorUserId,
+            ShareAmount = 10.00m,
+        }]);
+
+        var exception = await Record.ExceptionAsync(() => staleTopicRepository.DeleteAsync(staleTopic!, staleDescendants));
+
+        Assert.Null(exception);
     }
 
     private async Task<(Guid RootId, Guid CreatorUserId)> CreateRootTopicAsync()
