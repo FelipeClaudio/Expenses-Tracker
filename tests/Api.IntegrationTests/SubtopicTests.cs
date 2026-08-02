@@ -40,4 +40,39 @@ public class SubtopicTests(CustomWebApplicationFactory factory)
             .Content.ReadFromJsonAsync<List<TopicResponse>>();
         Assert.Contains(childrenOfRoot!, t => t.Id == level1.Id);
     }
+
+    [Fact]
+    public async Task PostSubtopic_ByNonCreatorMember_Succeeds()
+    {
+        // FR-7 grants subtopic creation to "any Member," not just the
+        // topic's creator - this proves a second, joined-not-created
+        // member can actually do it.
+        var ownerClient = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(ownerClient, factory.GoogleTokenValidator);
+        var rootResponse = await ownerClient.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var root = await rootResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        var memberClient = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(memberClient, factory.GoogleTokenValidator);
+        await memberClient.PostAsync($"/api/topics/join/{root!.InviteCode}", null);
+
+        var response = await memberClient.PostAsJsonAsync($"/api/topics/{root.Id}/subtopics", new { name = "Groceries" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task PostSubtopic_WithWhitespaceName_Returns400(string name)
+    {
+        var client = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+        var rootResponse = await client.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var root = await rootResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        var response = await client.PostAsJsonAsync($"/api/topics/{root!.Id}/subtopics", new { name });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

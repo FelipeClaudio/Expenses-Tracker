@@ -68,6 +68,17 @@ public class TopicInviteTests(CustomWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task JoinTopic_WithCodeThatWasNeverValid_Returns404()
+    {
+        var client = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+
+        var response = await client.PostAsync($"/api/topics/join/{Guid.NewGuid():N}", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task RotateInviteCode_OnNonRootTopic_Returns400()
     {
         var client = factory.CreateClient();

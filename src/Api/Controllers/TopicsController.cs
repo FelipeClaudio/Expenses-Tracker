@@ -14,6 +14,11 @@ public sealed class TopicsController(ITopicService topicService) : ControllerBas
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTopicRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest("Name is required.");
+        }
+
         var topic = await topicService.CreateRootTopicAsync(request.Name, request.Description, CurrentUserId, cancellationToken);
         return Ok(ToResponse(topic));
     }
@@ -38,6 +43,11 @@ public sealed class TopicsController(ITopicService topicService) : ControllerBas
     [HttpPatch("{id:guid}")]
     public async Task<IActionResult> Rename(Guid id, [FromBody] RenameTopicRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest("Name is required.");
+        }
+
         var topic = await topicService.GetByIdAsync(id, cancellationToken);
         if (topic is null)
         {
@@ -74,6 +84,11 @@ public sealed class TopicsController(ITopicService topicService) : ControllerBas
     [HttpPost("{id:guid}/subtopics")]
     public async Task<IActionResult> CreateSubtopic(Guid id, [FromBody] CreateTopicRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest("Name is required.");
+        }
+
         var parent = await topicService.GetByIdAsync(id, cancellationToken);
         if (parent is null)
         {
