@@ -127,6 +127,42 @@ public sealed class TopicsController(ITopicService topicService) : ControllerBas
         return Ok(new RotateInviteCodeResponse(newCode));
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        [FromQuery] bool confirmCascade,
+        [FromQuery] string? confirmName,
+        CancellationToken cancellationToken)
+    {
+        var topic = await topicService.GetByIdAsync(id, cancellationToken);
+        if (topic is null)
+        {
+            return NotFound();
+        }
+
+        // FR-8a/NFR-12: delete is restricted to the creator of this specific
+        // node - stricter than the general membership check used elsewhere.
+        if (topic.CreatedByUserId != CurrentUserId)
+        {
+            return Forbid();
+        }
+
+        var descendants = await topicService.GetDescendantsAsync(topic, cancellationToken);
+
+        if (descendants.Count > 0 && !confirmCascade)
+        {
+            return Conflict(new DeleteTopicWarningResponse(SubtopicCount: descendants.Count, ExpenseCount: 0));
+        }
+
+        if (topic.IsRoot && !string.Equals(confirmName, topic.Name, StringComparison.Ordinal))
+        {
+            return BadRequest("Deleting a root topic requires confirmName (as a query parameter) to exactly match the topic's name.");
+        }
+
+        await topicService.DeleteAsync(topic, descendants, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPost("join/{inviteCode}")]
     public async Task<IActionResult> Join(string inviteCode, CancellationToken cancellationToken)
     {

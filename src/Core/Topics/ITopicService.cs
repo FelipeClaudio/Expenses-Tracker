@@ -23,4 +23,10 @@ public interface ITopicService
 
     /// <summary>Whether the user is a member of the given (already-fetched) topic's root (FR-3).</summary>
     Task<bool> IsMemberAsync(Topic topic, Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Every descendant at any depth under an already-validated topic node (UC-6).</summary>
+    Task<IReadOnlyList<Topic>> GetDescendantsAsync(Topic topic, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes an already-validated topic node and its descendants (UC-6/FR-8a).</summary>
+    Task DeleteAsync(Topic topic, IReadOnlyList<Topic> descendants, CancellationToken cancellationToken = default);
 }
