@@ -89,6 +89,29 @@ public class SettlementServiceTests
     }
 
     [Fact]
+    public void ComputeSettlement_EmptyInput_ReturnsNoTransfers()
+    {
+        var transfers = _sut.ComputeSettlement(new Dictionary<Guid, decimal>());
+
+        Assert.Empty(transfers);
+    }
+
+    [Fact]
+    public void ComputeSettlement_BalancesDoNotSumToZero_ThrowsArgumentException()
+    {
+        // A single creditor with no matching debtor (or any other set of
+        // balances that doesn't net to zero) signals an upstream bug in
+        // whatever computed these balances — silently dropping the
+        // unresolved amount would be worse than failing loudly.
+        var balances = new Dictionary<Guid, decimal>
+        {
+            [Guid.NewGuid()] = 50.00m,
+        };
+
+        Assert.Throws<ArgumentException>(() => _sut.ComputeSettlement(balances));
+    }
+
+    [Fact]
     public void ComputeSettlement_UnevenAmounts_HandlesFractionalCentsWithNoRoundingDrift()
     {
         var alice = Guid.NewGuid();

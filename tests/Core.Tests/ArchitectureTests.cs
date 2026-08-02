@@ -21,12 +21,9 @@ public class ArchitectureTests
     [Fact]
     public void CoreProject_HasNoInfrastructureOrAspNetReferences()
     {
-        var csprojPath = Path.Combine(FindRepoRoot(), "src", "Core", "Core.csproj");
-        Assert.True(File.Exists(csprojPath), $"Expected to find {csprojPath}");
-
-        var doc = XDocument.Load(csprojPath);
-        var referenceIncludes = doc.Descendants("ProjectReference")
-            .Concat(doc.Descendants("PackageReference"))
+        var csproj = LoadCoreCsproj();
+        var referenceIncludes = csproj.Descendants("ProjectReference")
+            .Concat(csproj.Descendants("PackageReference"))
             .Select(e => e.Attribute("Include")?.Value ?? string.Empty)
             .ToList();
 
@@ -39,6 +36,42 @@ public class ArchitectureTests
                     $"Core.csproj references '{include}', which pulls in '{forbidden}' — Core must stay infrastructure-free.");
             }
         }
+    }
+
+    /// <summary>
+    /// <c>PackageReference</c>/<c>ProjectReference</c> aren't the only way a
+    /// project pulls in ASP.NET Core — <c>FrameworkReference</c> (what
+    /// ASP.NET Core projects normally use for the shared framework) has no
+    /// package name to pattern-match, so it needs its own check.
+    /// </summary>
+    [Fact]
+    public void CoreProject_HasNoFrameworkReference()
+    {
+        var frameworkReferences = LoadCoreCsproj().Descendants("FrameworkReference").ToList();
+
+        Assert.Empty(frameworkReferences);
+    }
+
+    /// <summary>
+    /// Switching the project's Sdk attribute to Microsoft.NET.Sdk.Web (or
+    /// .Worker, etc.) implicitly grants ASP.NET Core APIs with zero
+    /// PackageReference/ProjectReference/FrameworkReference entries — the
+    /// other checks in this class would stay green even though Core stopped
+    /// being a plain class library.
+    /// </summary>
+    [Fact]
+    public void CoreProject_UsesPlainClassLibrarySdk()
+    {
+        var sdk = LoadCoreCsproj().Root?.Attribute("Sdk")?.Value;
+
+        Assert.Equal("Microsoft.NET.Sdk", sdk);
+    }
+
+    private static XDocument LoadCoreCsproj()
+    {
+        var csprojPath = Path.Combine(FindRepoRoot(), "src", "Core", "Core.csproj");
+        Assert.True(File.Exists(csprojPath), $"Expected to find {csprojPath}");
+        return XDocument.Load(csprojPath);
     }
 
     private static string FindRepoRoot()

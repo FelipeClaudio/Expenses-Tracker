@@ -11,6 +11,14 @@ public sealed class SettlementService : ISettlementService
 {
     public IReadOnlyList<Transfer> ComputeSettlement(IReadOnlyDictionary<Guid, decimal> netBalances)
     {
+        if (netBalances.Values.Sum() != 0m)
+        {
+            throw new ArgumentException(
+                "Net balances must sum to zero (every expense share owed must be backed by an equal amount paid). " +
+                "A nonzero sum means the caller computed balances incorrectly upstream.",
+                nameof(netBalances));
+        }
+
         var remaining = netBalances
             .Where(b => b.Value != 0m)
             .ToDictionary(b => b.Key, b => b.Value);
