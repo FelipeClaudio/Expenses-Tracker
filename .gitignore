@@ -1,0 +1,15 @@
+# .NET build output
+bin/
+obj/
+*.user
+
+# Node (client has its own too, this is a safety net for any stray installs)
+**/node_modules/
+
+# IDE
+.vs/
+.idea/
+*.suo
+
+# Local scratch (Claude Code session artifacts, not project deliverables)
+.claude/

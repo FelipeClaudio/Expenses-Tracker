@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore
+      - run: dotnet build --no-restore
+      - run: dotnet test --no-build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+# Build-order step 10 extends this with:
+#   - npm test (Vitest) and npx playwright test for the frontend
+#   - docker build for src/Api/Dockerfile and client/Dockerfile
+#   - Testcontainers-backed Api.IntegrationTests (needs Docker-in-Docker,
+#     already available on GitHub-hosted runners)
+# left out here since this is the build-order step 1 scaffold, before those
+# suites exist.
