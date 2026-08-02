@@ -1,3 +1,7 @@
+# Local development only. Credentials below are intentionally hardcoded
+# placeholders for the local Postgres container — never copy this pattern
+# into a real environment; production config comes from Cloud Run/Neon
+# secrets, not this file.
 services:
   postgres:
     image: postgres:17-alpine

@@ -4,8 +4,6 @@ WORKDIR /src
 COPY src/Api/Api.csproj src/Api/
 COPY src/Core/Core.csproj src/Core/
 COPY src/Infrastructure/Infrastructure.csproj src/Infrastructure/
-COPY tests/Core.Tests/Core.Tests.csproj tests/Core.Tests/
-COPY tests/Api.IntegrationTests/Api.IntegrationTests.csproj tests/Api.IntegrationTests/
 RUN dotnet restore src/Api/Api.csproj
 
 COPY src/Api/ src/Api/
