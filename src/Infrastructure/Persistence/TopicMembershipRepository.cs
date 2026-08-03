@@ -13,6 +13,14 @@ public sealed class TopicMembershipRepository(AppDbContext dbContext) : ITopicMe
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Guid>> GetMemberUserIdsAsync(Guid rootTopicId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.TopicMembers
+            .Where(m => m.RootTopicId == rootTopicId)
+            .Select(m => m.UserId)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddMemberAsync(TopicMember member, CancellationToken cancellationToken = default)
     {
         dbContext.TopicMembers.Add(member);

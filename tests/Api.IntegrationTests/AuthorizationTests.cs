@@ -23,6 +23,9 @@ public class AuthorizationTests(CustomWebApplicationFactory factory)
     [InlineData("POST", "/invite/rotate")]
     [InlineData("GET", "/expenses")]
     [InlineData("POST", "/expenses")]
+    [InlineData("GET", "/balances")]
+    [InlineData("GET", "/settlements")]
+    [InlineData("POST", "/settlements/mark-paid")]
     public async Task NonMember_Returns403ForTopicEndpoints(string method, string subPath)
     {
         var ownerClient = factory.CreateClient();
@@ -47,6 +50,15 @@ public class AuthorizationTests(CustomWebApplicationFactory factory)
                 paidByUserId = owner.Id,
                 expenseDate = DateTimeOffset.UtcNow,
                 participantUserIds = new[] { owner.Id },
+            });
+        }
+        else if (method is "POST" && subPath is "/settlements/mark-paid")
+        {
+            request.Content = JsonContent.Create(new
+            {
+                fromUserId = owner.Id,
+                toUserId = owner.Id,
+                amount = 10.00m,
             });
         }
 
