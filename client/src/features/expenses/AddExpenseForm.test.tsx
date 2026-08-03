@@ -64,7 +64,7 @@ describe('AddExpenseForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/participant/i)
   })
 
-  it('surfaces a server validation error', async () => {
+  it('displays the server-returned error message when submission is rejected', async () => {
     server.use(
       http.post('/api/topics/t-1/expenses', () => new HttpResponse('Amount must be positive.', { status: 400 })),
     )
