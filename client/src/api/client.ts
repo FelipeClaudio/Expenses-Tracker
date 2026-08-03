@@ -46,6 +46,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   getMe: () => request<AuthenticatedUser>('/api/users/me'),
 
+  signInGoogle: (idToken: string) =>
+    request<AuthenticatedUser>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
+
   getMyTopics: () => request<Topic[]>('/api/topics'),
 
   createTopic: (input: { name: string; description?: string }) =>

@@ -24,7 +24,20 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddSingleton<IClock, SystemClock>();
-        services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
+
+        // Auth:FakeMode is only ever set for local Playwright E2E runs (see
+        // client/playwright.config.ts) so smoke tests can sign in without a
+        // real Google account. Defaults to false everywhere else, including
+        // production.
+        if (configuration.GetValue<bool>("Auth:FakeMode"))
+        {
+            services.AddSingleton<IGoogleTokenValidator, FakeGoogleTokenValidator>();
+        }
+        else
+        {
+            services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
+        }
+
         services.AddScoped<IAuthService, AuthService>();
 
         services.AddScoped<ITopicRepository, TopicRepository>();
