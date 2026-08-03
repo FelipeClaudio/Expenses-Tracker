@@ -15,6 +15,8 @@ jobs:
           global-json-file: global.json
       - run: dotnet restore
       - run: dotnet build --no-restore
+      # Runs Core.Tests and the Testcontainers-backed Api.IntegrationTests
+      # (Docker is already available on GitHub-hosted runners).
       - run: dotnet test --no-build
 
   frontend:
@@ -31,12 +33,46 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
 
-# Build-order step 10 extends this with:
-#   - npm test (Vitest) and npx playwright test for the frontend
-#   - docker build for src/Api/Dockerfile and client/Dockerfile
-#   - Testcontainers-backed Api.IntegrationTests (needs Docker-in-Docker,
-#     already available on GitHub-hosted runners)
-# left out here since this is the build-order step 1 scaffold, before those
-# suites exist.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      # Kestrel needs the ASP.NET Core HTTPS dev cert to exist (see NFR-11 -
+      # Secure cookies require a real HTTPS connection); a fresh runner
+      # doesn't have one yet. No --trust needed: Playwright's
+      # ignoreHTTPSErrors handles the untrusted-cert side instead.
+      - run: dotnet dev-certs https
+      # Pre-build so Playwright's webServer (`dotnet run`) starts from an
+      # already-restored/compiled project instead of doing that cold under
+      # its own startup timeout.
+      - run: dotnet build src/Api/Api.csproj
+      - run: npm ci
+        working-directory: client
+      - run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: client
+      - run: npx playwright test
+        working-directory: client
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: client/playwright-report/
+          retention-days: 7
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f src/Api/Dockerfile .
+      - run: docker build -f client/Dockerfile client
