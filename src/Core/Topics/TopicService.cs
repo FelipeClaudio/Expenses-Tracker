@@ -92,6 +92,9 @@ public sealed class TopicService(
     public Task<bool> IsMemberAsync(Topic topic, Guid userId, CancellationToken cancellationToken = default) =>
         membershipRepository.IsMemberAsync(topic.RootTopicId, userId, cancellationToken);
 
+    public Task<IReadOnlyList<Guid>> GetMemberUserIdsAsync(Topic topic, CancellationToken cancellationToken = default) =>
+        membershipRepository.GetMemberUserIdsAsync(topic.RootTopicId, cancellationToken);
+
     public Task<IReadOnlyList<Topic>> GetDescendantsAsync(Topic topic, CancellationToken cancellationToken = default) =>
         topicRepository.FindDescendantsAsync(topic, cancellationToken);
 

@@ -7,9 +7,16 @@ public sealed class BalanceService(
     ISettledTransferRepository settledTransferRepository) : IBalanceService
 {
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetNetBalancesAsync(
-        Guid rootTopicId, IReadOnlyList<Guid> topicIdsInSubtree, CancellationToken cancellationToken = default)
+        Guid rootTopicId,
+        IReadOnlyList<Guid> topicIdsInSubtree,
+        IReadOnlyList<Guid> memberUserIds,
+        CancellationToken cancellationToken = default)
     {
         var balances = new Dictionary<Guid, decimal>();
+        foreach (var memberUserId in memberUserIds)
+        {
+            balances[memberUserId] = 0m;
+        }
 
         var expenses = await expenseRepository.FindByTopicIdsAsync(topicIdsInSubtree, cancellationToken);
         foreach (var (expense, participants) in expenses)

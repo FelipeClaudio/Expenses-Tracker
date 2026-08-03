@@ -269,7 +269,8 @@ public sealed class TopicsController(
         }
 
         var (root, topicIds) = await ResolveRootAndSubtreeAsync(topic, cancellationToken);
-        var balances = await balanceService.GetNetBalancesAsync(root.Id, topicIds, cancellationToken);
+        var memberUserIds = await topicService.GetMemberUserIdsAsync(root, cancellationToken);
+        var balances = await balanceService.GetNetBalancesAsync(root.Id, topicIds, memberUserIds, cancellationToken);
 
         return Ok(balances.Select(b => new BalanceResponse(b.Key, b.Value)));
     }
@@ -289,7 +290,8 @@ public sealed class TopicsController(
         }
 
         var (root, topicIds) = await ResolveRootAndSubtreeAsync(topic, cancellationToken);
-        var balances = await balanceService.GetNetBalancesAsync(root.Id, topicIds, cancellationToken);
+        var memberUserIds = await topicService.GetMemberUserIdsAsync(root, cancellationToken);
+        var balances = await balanceService.GetNetBalancesAsync(root.Id, topicIds, memberUserIds, cancellationToken);
         var transfers = settlementService.ComputeSettlement(balances);
 
         return Ok(transfers.Select(t => new SettlementTransferResponse(t.FromUserId, t.ToUserId, t.Amount)));

@@ -109,4 +109,33 @@ public class BalanceTests(CustomWebApplicationFactory factory)
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
+    [Fact]
+    public async Task GetBalances_IncludesMembersWithNoExpenseActivity_AtZero()
+    {
+        var ownerClient = factory.CreateClient();
+        var owner = await AuthTestHelpers.SignInAsNewUserAsync(ownerClient, factory.GoogleTokenValidator);
+        var rootResponse = await ownerClient.PostAsJsonAsync("/api/topics", new { name = "Trip" });
+        var root = await rootResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        // Joins the topic but never pays for or is tagged on any expense.
+        var bystanderClient = factory.CreateClient();
+        var bystander = await AuthTestHelpers.SignInAsNewUserAsync(bystanderClient, factory.GoogleTokenValidator);
+        await bystanderClient.PostAsync($"/api/topics/join/{root!.InviteCode}", null);
+
+        await ownerClient.PostAsJsonAsync($"/api/topics/{root.Id}/expenses", new
+        {
+            description = "Solo dinner",
+            amount = 10.00m,
+            paidByUserId = owner.Id,
+            expenseDate = DateTimeOffset.UtcNow,
+            participantUserIds = new[] { owner.Id },
+        });
+
+        var balancesResponse = await ownerClient.GetAsync($"/api/topics/{root.Id}/balances");
+        var balances = (await balancesResponse.Content.ReadFromJsonAsync<List<BalanceResponse>>())!;
+
+        // UC-10: every member of the root Topic must appear, even at 0.00.
+        Assert.Equal(0.00m, balances.Single(b => b.UserId == bystander.Id).NetBalance);
+    }
 }
