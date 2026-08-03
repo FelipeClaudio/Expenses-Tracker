@@ -10,6 +10,9 @@ public interface ITopicService
 
     Task<Topic?> GetByIdAsync(Guid topicId, CancellationToken cancellationToken = default);
 
+    /// <summary>Every root Topic the user belongs to (UC-2's "Topic list").</summary>
+    Task<IReadOnlyList<Topic>> GetMyRootTopicsAsync(Guid userId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Topic>> GetSubtopicsAsync(Guid parentTopicId, CancellationToken cancellationToken = default);
 
     /// <summary>Renames an already-validated topic node (FR-8).</summary>

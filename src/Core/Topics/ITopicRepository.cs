@@ -6,6 +6,9 @@ public interface ITopicRepository
 
     Task<Topic?> FindByIdAsync(Guid topicId, CancellationToken cancellationToken = default);
 
+    /// <summary>Every root Topic the given user is a member of (UC-2's "appears in the Member's Topic list").</summary>
+    Task<IReadOnlyList<Topic>> FindRootsByMemberUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Topic>> FindChildrenAsync(Guid parentTopicId, CancellationToken cancellationToken = default);
 
     Task<Topic?> FindRootByInviteCodeAsync(string inviteCode, CancellationToken cancellationToken = default);

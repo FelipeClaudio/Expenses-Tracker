@@ -18,6 +18,13 @@ public sealed class TopicsController(
 {
     private Guid CurrentUserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    [HttpGet]
+    public async Task<IActionResult> GetMyTopics(CancellationToken cancellationToken)
+    {
+        var topics = await topicService.GetMyRootTopicsAsync(CurrentUserId, cancellationToken);
+        return Ok(topics.Select(ToResponse));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTopicRequest request, CancellationToken cancellationToken)
     {
