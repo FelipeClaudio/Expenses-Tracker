@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,17 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// The frontend (Vercel) and API (Cloud Run) are different origins in every
+// environment, including local dev (Vite's dev server vs. Kestrel) - so
+// cross-origin requests need an explicit allowlist. Credentialed CORS can't
+// use a wildcard origin, hence the configured list rather than AllowAnyOrigin.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
+});
 
 // Catches anything that escapes controller/middleware handling (e.g. the
 // concurrent-first-sign-in race in AuthService, or any future unforeseen
@@ -87,10 +99,19 @@ app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+
+    // Nothing else applies migrations outside of tests
+    // (CustomWebApplicationFactory does its own). Without this, a fresh
+    // docker-compose/local Postgres never gets a schema.
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.AppDbContext>();
+    await db.Database.MigrateAsync();
 }
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
+
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();
