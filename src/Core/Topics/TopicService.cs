@@ -53,6 +53,9 @@ public sealed class TopicService(
     public Task<Topic?> GetByIdAsync(Guid topicId, CancellationToken cancellationToken = default) =>
         topicRepository.FindByIdAsync(topicId, cancellationToken);
 
+    public Task<IReadOnlyList<Topic>> GetMyRootTopicsAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        topicRepository.FindRootsByMemberUserIdAsync(userId, cancellationToken);
+
     public Task<IReadOnlyList<Topic>> GetSubtopicsAsync(Guid parentTopicId, CancellationToken cancellationToken = default) =>
         topicRepository.FindChildrenAsync(parentTopicId, cancellationToken);
 

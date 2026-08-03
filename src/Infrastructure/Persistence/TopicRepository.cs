@@ -20,6 +20,14 @@ public sealed class TopicRepository(AppDbContext dbContext) : ITopicRepository
         return dbContext.Topics.SingleOrDefaultAsync(t => t.Id == topicId, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Topic>> FindRootsByMemberUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.TopicMembers
+            .Where(m => m.UserId == userId)
+            .Join(dbContext.Topics, m => m.RootTopicId, t => t.Id, (m, t) => t)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Topic>> FindChildrenAsync(Guid parentTopicId, CancellationToken cancellationToken = default)
     {
         return await dbContext.Topics

@@ -75,6 +75,31 @@ public class TopicTests(CustomWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task GetTopics_ListsOnlyRootTopicsCurrentUserBelongsTo()
+    {
+        var client = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(client, factory.GoogleTokenValidator);
+
+        var mineResponse = await client.PostAsJsonAsync("/api/topics", new { name = "My Trip" });
+        var mine = await mineResponse.Content.ReadFromJsonAsync<TopicResponse>();
+
+        // A subtopic of my own root must NOT show up as a separate entry -
+        // the list is root topics only.
+        await client.PostAsJsonAsync($"/api/topics/{mine!.Id}/subtopics", new { name = "Fuel" });
+
+        var otherClient = factory.CreateClient();
+        await AuthTestHelpers.SignInAsNewUserAsync(otherClient, factory.GoogleTokenValidator);
+        await otherClient.PostAsJsonAsync("/api/topics", new { name = "Someone Else's Trip" });
+
+        var response = await client.GetAsync("/api/topics");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var topics = await response.Content.ReadFromJsonAsync<List<TopicResponse>>();
+        var listed = Assert.Single(topics!);
+        Assert.Equal(mine.Id, listed.Id);
+    }
+
+    [Fact]
     public async Task GetById_ForNonexistentTopic_Returns404()
     {
         var client = factory.CreateClient();

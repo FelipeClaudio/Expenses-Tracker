@@ -15,6 +15,7 @@ public class AuthenticationTests(CustomWebApplicationFactory factory)
 
     [Theory]
     [InlineData("GET", "/api/users/me")]
+    [InlineData("GET", "/api/topics")]
     [InlineData("POST", "/api/topics")]
     [InlineData("GET", "/api/topics/00000000-0000-0000-0000-000000000000")]
     [InlineData("PATCH", "/api/topics/00000000-0000-0000-0000-000000000000")]
