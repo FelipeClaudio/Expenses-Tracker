@@ -8,6 +8,9 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -28,6 +31,12 @@ jobs:
           reporttypes: Html;MarkdownSummaryGithub
       - name: Add coverage summary to job summary
         run: cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
+        with:
+          header: backend-coverage
+          path: coverage/report/SummaryGithub.md
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -37,6 +46,9 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     defaults:
       run:
         working-directory: client
@@ -50,11 +62,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:coverage
-      - name: Add coverage summary to job summary
+      - name: Add coverage summary and PR comment
         uses: davelosert/vitest-coverage-report-action@v2.12.2
         with:
           working-directory: client
-          comment-on: none
+          comment-on: pr
       - uses: actions/upload-artifact@v4
         if: always()
         with:
