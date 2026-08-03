@@ -8,9 +8,17 @@ const apiConnectionString =
 
 export default defineConfig({
   testDir: './e2e',
-  globalSetup: './e2e/global-setup.ts',
+  // Postgres must already be up before this config runs at all - NOT via
+  // globalSetup, whose ordering relative to webServer isn't guaranteed
+  // (Playwright starts webServer before globalSetup, so the API's
+  // migration-on-startup can race a globalSetup-managed container and lose
+  // on a cold host - see the pretest:e2e npm hook / the e2e CI job's Postgres
+  // step, both of which run before this file is ever loaded).
   fullyParallel: false,
-  reporter: 'list',
+  // CI additionally gets an HTML report on disk (uploaded as a build
+  // artifact on failure - see ci.yml) since there's no terminal to read
+  // the list reporter's output from after the run finishes.
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${CLIENT_PORT}`,
     trace: 'on-first-retry',
@@ -29,7 +37,7 @@ export default defineConfig({
       command: 'dotnet run --no-launch-profile',
       cwd: '../src/Api',
       port: API_PORT,
-      timeout: 120_000,
+      timeout: 180_000,
       reuseExistingServer: !process.env.CI,
       env: {
         ASPNETCORE_ENVIRONMENT: 'Development',

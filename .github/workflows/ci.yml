@@ -8,6 +8,9 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -15,10 +18,41 @@ jobs:
           global-json-file: global.json
       - run: dotnet restore
       - run: dotnet build --no-restore
-      - run: dotnet test --no-build
+      # Runs Core.Tests and the Testcontainers-backed Api.IntegrationTests
+      # (Docker is already available on GitHub-hosted runners). Both
+      # projects already reference coverlet.collector, so this just needs
+      # the collect flag - no extra package/config required.
+      - run: dotnet test --no-build --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - name: Generate coverage report
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.5.11
+        with:
+          reports: coverage/**/coverage.cobertura.xml
+          targetdir: coverage/report
+          reporttypes: Html;MarkdownSummaryGithub
+      - name: Add coverage summary to job summary
+        run: cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment coverage on PR
+        # Skip for fork PRs: GitHub forces GITHUB_TOKEN to read-only there
+        # regardless of the permissions block above, so posting a comment
+        # would 403 and fail this step (and the job) over something
+        # unrelated to the contributor's actual code.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
+        with:
+          header: backend-coverage
+          path: coverage/report/SummaryGithub.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage-report
+          path: coverage/report
+          retention-days: 7
 
   frontend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     defaults:
       run:
         working-directory: client
@@ -31,12 +65,69 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:coverage
+      - name: Add coverage summary and PR comment
+        uses: davelosert/vitest-coverage-report-action@v2.12.2
+        with:
+          working-directory: client
+          # This one action writes both the job summary and the PR comment,
+          # unlike the backend job where those are separate steps - so
+          # instead of skipping the whole step for fork PRs (which would
+          # also lose the job summary), only the comment half is disabled.
+          # A fork's read-only GITHUB_TOKEN would otherwise 403 trying to
+          # post the comment.
+          comment-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'pr' || 'none' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage-report
+          path: client/coverage
+          retention-days: 7
       - run: npm run build
 
-# Build-order step 10 extends this with:
-#   - npm test (Vitest) and npx playwright test for the frontend
-#   - docker build for src/Api/Dockerfile and client/Dockerfile
-#   - Testcontainers-backed Api.IntegrationTests (needs Docker-in-Docker,
-#     already available on GitHub-hosted runners)
-# left out here since this is the build-order step 1 scaffold, before those
-# suites exist.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      # Kestrel needs the ASP.NET Core HTTPS dev cert to exist (see NFR-11 -
+      # Secure cookies require a real HTTPS connection); a fresh runner
+      # doesn't have one yet. No --trust needed: Playwright's
+      # ignoreHTTPSErrors handles the untrusted-cert side instead.
+      - run: dotnet dev-certs https
+      # Pre-build so Playwright's webServer (`dotnet run`) starts from an
+      # already-restored/compiled project instead of doing that cold under
+      # its own startup timeout.
+      - run: dotnet build src/Api/Api.csproj
+      - run: npm ci
+        working-directory: client
+      - run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: client
+      # Must be healthy *before* `playwright test` runs - Playwright starts
+      # its webServer entries before globalSetup, not after (an unreliable
+      # ordering we used to depend on here), so the API's migration-on-startup
+      # would otherwise race a still-starting Postgres container and lose on
+      # a fresh runner with no cached image/warm container.
+      - run: docker compose up -d --wait postgres
+      - run: npx playwright test
+        working-directory: client
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: client/playwright-report/
+          retention-days: 7
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f src/Api/Dockerfile .
+      - run: docker build -f client/Dockerfile client
