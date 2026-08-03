@@ -32,7 +32,11 @@ jobs:
       - name: Add coverage summary to job summary
         run: cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
       - name: Comment coverage on PR
-        if: github.event_name == 'pull_request'
+        # Skip for fork PRs: GitHub forces GITHUB_TOKEN to read-only there
+        # regardless of the permissions block above, so posting a comment
+        # would 403 and fail this step (and the job) over something
+        # unrelated to the contributor's actual code.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: marocchino/sticky-pull-request-comment@v3.0.5
         with:
           header: backend-coverage
@@ -66,7 +70,13 @@ jobs:
         uses: davelosert/vitest-coverage-report-action@v2.12.2
         with:
           working-directory: client
-          comment-on: pr
+          # This one action writes both the job summary and the PR comment,
+          # unlike the backend job where those are separate steps - so
+          # instead of skipping the whole step for fork PRs (which would
+          # also lose the job summary), only the comment half is disabled.
+          # A fork's read-only GITHUB_TOKEN would otherwise 403 trying to
+          # post the comment.
+          comment-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'pr' || 'none' }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
