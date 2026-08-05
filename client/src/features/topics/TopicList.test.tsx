@@ -3,7 +3,19 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { server } from '../../test/server'
+import { AuthProvider } from '../../app/AuthContext'
 import { TopicList } from './TopicList'
+
+// TopicList greets the signed-in user (via useAuth), so every render needs
+// an AuthProvider ancestor; '/api/users/me' is mocked by the default test
+// handlers (see src/test/handlers.ts).
+function renderTopicList(props?: React.ComponentProps<typeof TopicList>) {
+  return render(
+    <AuthProvider>
+      <TopicList {...props} />
+    </AuthProvider>,
+  )
+}
 
 describe('TopicList', () => {
   it('renders the root topics returned by the API', async () => {
@@ -16,7 +28,7 @@ describe('TopicList', () => {
       ),
     )
 
-    render(<TopicList />)
+    renderTopicList()
 
     expect(await screen.findByText('Portugal Trip')).toBeInTheDocument()
     expect(screen.getByText('Flatmates')).toBeInTheDocument()
@@ -25,7 +37,7 @@ describe('TopicList', () => {
   it('shows an empty state when the user has no topics yet', async () => {
     server.use(http.get('/api/topics', () => HttpResponse.json([])))
 
-    render(<TopicList />)
+    renderTopicList()
 
     expect(await screen.findByText(/no topics yet/i)).toBeInTheDocument()
   })
@@ -48,7 +60,7 @@ describe('TopicList', () => {
       }),
     )
 
-    render(<TopicList />)
+    renderTopicList()
     await screen.findByText(/no topics yet/i)
 
     const user = userEvent.setup()
@@ -68,7 +80,7 @@ describe('TopicList', () => {
     )
     const onSelectTopic = vi.fn()
 
-    render(<TopicList onSelectTopic={onSelectTopic} />)
+    renderTopicList({ onSelectTopic })
 
     const user = userEvent.setup()
     await user.click(await screen.findByText('Portugal Trip'))

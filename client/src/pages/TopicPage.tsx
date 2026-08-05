@@ -24,7 +24,7 @@ export function TopicPage() {
         <TopicDetail key={refreshKey} topicId={topicId} onOpenSubtopic={(id) => navigate(`/topics/${id}`)} />
 
         <section>
-          <h2 className="mb-2 text-lg font-medium">Add an expense</h2>
+          <h2 className="mb-2 text-lg font-semibold text-navy-900 dark:text-white">Add an expense</h2>
           <AddExpenseForm topicId={topicId} members={members} onExpenseLogged={() => setRefreshKey((key) => key + 1)} />
         </section>
 
