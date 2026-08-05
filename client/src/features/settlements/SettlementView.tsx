@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { Balance, SettlementTransfer } from '../../api/types'
+import { Button } from '../../components/ui/button'
+import { HeroCard, Card } from '../../components/ui/card'
+import { ArrowDownGlyph, ArrowUpGlyph, IconBadge } from '../../components/ui/icon-badge'
 
 interface Member {
   id: string
@@ -50,34 +53,60 @@ export function SettlementView({ topicId, members }: SettlementViewProps) {
   }
 
   return (
-    <div>
-      <h2>Balances</h2>
-      <ul>
-        {balances.map((balance) => (
-          <li key={balance.userId}>
-            {nameOf(balance.userId)}{' '}
-            {balance.netBalance >= 0
-              ? `is owed ${balance.netBalance.toFixed(2)}`
-              : `owes ${Math.abs(balance.netBalance).toFixed(2)}`}
-          </li>
-        ))}
-      </ul>
+    <div className="flex flex-col gap-6">
+      <HeroCard>
+        <h2 className="mb-4 text-lg font-semibold">Balances</h2>
+        {balances.length === 0 ? (
+          <p className="text-white/70">Nobody owes anything yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {balances.map((balance) => {
+              const isPositive = balance.netBalance >= 0
+              return (
+                <li key={balance.userId} className="flex items-center gap-3">
+                  <IconBadge variant={isPositive ? 'positive' : 'negative'} aria-hidden="true">
+                    {isPositive ? <ArrowUpGlyph /> : <ArrowDownGlyph />}
+                  </IconBadge>
+                  <span className="flex-1 font-medium">{nameOf(balance.userId)}</span>
+                  <span className={isPositive ? 'font-semibold text-mint-400' : 'font-semibold text-rose-300'}>
+                    {isPositive
+                      ? `is owed ${balance.netBalance.toFixed(2)}`
+                      : `owes ${Math.abs(balance.netBalance).toFixed(2)}`}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </HeroCard>
 
-      <h2>Settle up</h2>
-      {transfers.length === 0 ? (
-        <p>All settled up!</p>
-      ) : (
-        <ul>
-          {transfers.map((transfer) => (
-            <li key={`${transfer.fromUserId}-${transfer.toUserId}`}>
-              {nameOf(transfer.fromUserId)} owes {nameOf(transfer.toUserId)} {transfer.amount.toFixed(2)}
-              <button type="button" onClick={() => handleMarkPaid(transfer)}>
-                Mark as paid
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section>
+        <h2 className="mb-2 text-lg font-semibold text-navy-900 dark:text-white">Settle up</h2>
+        {transfers.length === 0 ? (
+          <p className="text-navy-400 dark:text-navy-300">All settled up!</p>
+        ) : (
+          <Card className="p-2">
+            <ul className="flex flex-col">
+              {transfers.map((transfer) => (
+                <li
+                  key={`${transfer.fromUserId}-${transfer.toUserId}`}
+                  className="flex flex-wrap items-center gap-3 rounded-2xl px-2 py-2"
+                >
+                  <IconBadge variant="neutral" aria-hidden="true">
+                    <ArrowDownGlyph />
+                  </IconBadge>
+                  <span className="flex-1 text-navy-900 dark:text-white">
+                    {nameOf(transfer.fromUserId)} owes {nameOf(transfer.toUserId)} {transfer.amount.toFixed(2)}
+                  </span>
+                  <Button type="button" onClick={() => handleMarkPaid(transfer)}>
+                    Mark as paid
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </section>
     </div>
   )
 }

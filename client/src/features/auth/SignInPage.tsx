@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { api } from '../../api/client'
 import { useAuth } from '../../app/AuthContext'
 import { Button } from '../../components/ui/button'
+import { HeroCard } from '../../components/ui/card'
 
 const fakeMode = import.meta.env.VITE_AUTH_FAKE_MODE === 'true'
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
@@ -62,17 +63,24 @@ export function SignInPage() {
   }, [])
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <h1 className="text-xl font-semibold">Sign in</h1>
-      {error && <p role="alert">{error}</p>}
+    <div className="flex min-h-svh flex-col items-center justify-center gap-4 bg-navy-50 p-4 dark:bg-navy-950">
+      <HeroCard className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+        <span className="size-3 rounded-full bg-mint-500" />
+        <h1 className="text-xl font-bold">Sign in</h1>
+        {error && (
+          <p role="alert" className="rounded-2xl bg-rose-500/20 px-4 py-2 text-sm font-medium text-rose-300">
+            {error}
+          </p>
+        )}
 
-      {fakeMode ? (
-        <Button onClick={() => completeSignIn(fakeCredential)}>Continue as test user</Button>
-      ) : googleClientId ? (
-        <div ref={googleButtonRef} />
-      ) : (
-        <Button disabled>Sign in with Google (not configured)</Button>
-      )}
+        {fakeMode ? (
+          <Button onClick={() => completeSignIn(fakeCredential)}>Continue as test user</Button>
+        ) : googleClientId ? (
+          <div ref={googleButtonRef} />
+        ) : (
+          <Button disabled>Sign in with Google (not configured)</Button>
+        )}
+      </HeroCard>
     </div>
   )
 }
